@@ -7,7 +7,7 @@ from SmartApi import SmartConnect
 import pyotp
 
 # ==============================
-# CONFIG (PUT YOUR VALUES)
+# CONFIG
 # ==============================
 
 API_KEY = "XUbkTXuh"
@@ -60,7 +60,7 @@ def login():
 
 
 # ==============================
-# GET DATA (AUTO TOKEN FIX)
+# GET CANDLES (FIXED)
 # ==============================
 
 def get_candles(token):
@@ -78,11 +78,18 @@ def get_candles(token):
 
         data = obj.getCandleData(params)
 
-        # 🔥 AUTO RELOGIN IF TOKEN EXPIRES
+        # 🔥 TOKEN EXPIRED FIX
         if data.get("status") is False and "Invalid Token" in str(data):
             print("Session expired → Re-login...")
             login()
+            time.sleep(2)
             data = obj.getCandleData(params)
+
+        # 🔥 RATE LIMIT FIX
+        if "Access denied" in str(data):
+            print("Rate limit hit → sleeping 10 sec...")
+            time.sleep(10)
+            return None
 
         if not data.get("data"):
             return None
@@ -98,41 +105,46 @@ def get_candles(token):
 
 
 # ==============================
-# SUPERTREND LOGIC
+# SUPERTREND SIGNAL
 # ==============================
 
 def check_signal(symbol, token):
     df = get_candles(token)
 
+    # 🔥 FIX NoneType crash
     if df is None or len(df) < 2:
         return
 
-    df["SUPERT"] = ta.supertrend(
-        df["high"],
-        df["low"],
-        df["close"],
-        length=10,
-        multiplier=3
-    )["SUPERTd_10_3.0"]
+    try:
+        df["SUPERT"] = ta.supertrend(
+            df["high"],
+            df["low"],
+            df["close"],
+            length=10,
+            multiplier=3
+        )["SUPERTd_10_3.0"]
 
-    prev = df.iloc[-2]
-    last = df.iloc[-1]
+        prev = df.iloc[-2]
+        last = df.iloc[-1]
 
-    # BUY
-    if prev["SUPERT"] == -1 and last["SUPERT"] == 1:
-        if last_signal.get(symbol) != "BUY":
-            msg = f"✅ BUY SIGNAL\n{symbol}\nPrice: {last['close']}"
-            print(msg)
-            send_telegram(msg)
-            last_signal[symbol] = "BUY"
+        # BUY
+        if prev["SUPERT"] == -1 and last["SUPERT"] == 1:
+            if last_signal.get(symbol) != "BUY":
+                msg = f"✅ BUY SIGNAL\n{symbol}\nPrice: {last['close']}"
+                print(msg)
+                send_telegram(msg)
+                last_signal[symbol] = "BUY"
 
-    # SELL
-    elif prev["SUPERT"] == 1 and last["SUPERT"] == -1:
-        if last_signal.get(symbol) != "SELL":
-            msg = f"❌ SELL SIGNAL\n{symbol}\nPrice: {last['close']}"
-            print(msg)
-            send_telegram(msg)
-            last_signal[symbol] = "SELL"
+        # SELL
+        elif prev["SUPERT"] == 1 and last["SUPERT"] == -1:
+            if last_signal.get(symbol) != "SELL":
+                msg = f"❌ SELL SIGNAL\n{symbol}\nPrice: {last['close']}"
+                print(msg)
+                send_telegram(msg)
+                last_signal[symbol] = "SELL"
+
+    except Exception as e:
+        print("Signal Error:", e)
 
 
 # ==============================
@@ -168,7 +180,7 @@ while True:
             check_signal(symbol, token)
 
         print("Waiting for next candle...")
-        time.sleep(300)
+        time.sleep(60)  # 🔥 reduced to avoid rate limit
 
     except Exception as e:
         print("Main Loop Error:", e)
