@@ -20,10 +20,6 @@ CHAT_ID = "8500636016"
 
 symbols = {
     "NIFTY": "26000",
-    "BANKNIFTY": "26009",
-    "FINNIFTY": "26037",
-    "MIDCPNIFTY": "26121",
-    "SENSEX": "1"
 }
 
 last_signal = {}
